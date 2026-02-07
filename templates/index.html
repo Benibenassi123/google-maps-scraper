@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Google Maps Scraper</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        .container { max-width: 800px; margin: 0 auto; }
+        .header { text-align: center; color: white; margin-bottom: 30px; }
+        .header h1 { font-size: 2.5em; margin-bottom: 10px; }
+        .header p { font-size: 1.1em; opacity: 0.9; }
+        .card {
+            background: white;
+            border-radius: 15px;
+            padding: 30px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        .form-group { margin-bottom: 20px; }
+        label { display: block; font-weight: 600; margin-bottom: 8px; color: #333; }
+        input[type="text"], input[type="number"], select {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 16px;
+            transition: border-color 0.3s;
+        }
+        input:focus, select:focus { outline: none; border-color: #667eea; }
+        .button {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            border-radius: 8px;
+            font-size: 18px;
+            font-weight: 600;
+            cursor: pointer;
+            width: 100%;
+            transition: transform 0.2s;
+        }
+        .button:hover { transform: translateY(-2px); }
+        .button:disabled { background: #ccc; cursor: not-allowed; }
+        .status {
+            padding: 15px;
+            border-radius: 8px;
+            margin-top: 20px;
+            display: none;
+        }
+        .status.info { background: #e3f2fd; color: #1976d2; border-left: 4px solid #1976d2; }
+        .status.success { background: #e8f5e9; color: #388e3c; border-left: 4px solid #388e3c; }
+        .status.error { background: #ffebee; color: #c62828; border-left: 4px solid #c62828; }
+        .spinner {
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #667eea;
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            animation: spin 1s linear infinite;
+            display: inline-block;
+            margin-right: 10px;
+        }
+        @keyframes spin { 100% { transform: rotate(360deg); } }
+        .result-item {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .result-name { font-weight: 600; color: #333; margin-bottom: 5px; }
+        .result-meta { font-size: 0.9em; color: #666; }
+        .download-btn {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+        }
+        .examples { background: #f8f9fa; padding: 15px; border-radius: 8px; margin-top: 20px; }
+        .example-item { padding: 8px; cursor: pointer; border-radius: 4px; margin-bottom: 5px; }
+        .example-item:hover { background: #e0e0e0; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🗺️ Google Maps Scraper</h1>
+            <p>Extract business data - No coding required!</p>
+        </div>
+
+        <div class="card">
+            <form id="scraperForm">
+                <div class="form-group">
+                    <label for="query">What are you looking for? 🔍</label>
+                    <input type="text" id="query" placeholder="e.g., restaurants, coffee shops" required>
+                </div>
+                <div class="form-group">
+                    <label for="location">Where? 📍</label>
+                    <input type="text" id="location" placeholder="e.g., New York, NY" required>
+                </div>
+                <div class="form-group">
+                    <label for="maxResults">Maximum Results 📊</label>
+                    <input type="number" id="maxResults" value="50" min="1" max="200">
+                </div>
+                <div class="form-group">
+                    <label for="outputFormat">Output Format 💾</label>
+                    <select id="outputFormat">
+                        <option value="csv">CSV (Excel)</option>
+                        <option value="json">JSON</option>
+                    </select>
+                </div>
+                <button type="submit" class="button" id="startBtn">Start Scraping 🚀</button>
+            </form>
+
+            <div class="examples">
+                <h3>💡 Quick Examples (click to use):</h3>
+                <div class="example-item" onclick="fillExample('pizza places', 'Chicago, IL')">🍕 Pizza places in Chicago</div>
+                <div class="example-item" onclick="fillExample('coffee shops', 'Seattle, WA')">☕ Coffee shops in Seattle</div>
+                <div class="example-item" onclick="fillExample('gyms', 'Los Angeles, CA')">🏋️ Gyms in Los Angeles</div>
+                <div class="example-item" onclick="fillExample('hotels', 'Miami, FL')">🏨 Hotels in Miami</div>
+            </div>
+
+            <div id="status" class="status"></div>
+        </div>
+
+        <div class="card" id="filesCard" style="display: none;">
+            <h2>📁 Your Downloaded Files</h2>
+            <div id="filesList"></div>
+        </div>
+    </div>
+
+    <script>
+        let checkInterval;
+        function fillExample(query, location) {
+            document.getElementById('query').value = query;
+            document.getElementById('location').value = location;
+        }
+        function showStatus(message, type) {
+            const status = document.getElementById('status');
+            status.className = `status ${type}`;
+            status.innerHTML = message;
+            status.style.display = 'block';
+        }
+        function updateStatus() {
+            fetch('/status').then(res => res.json()).then(data => {
+                if (data.running) {
+                    showStatus(`<div class="spinner"></div> ${data.progress}`, 'info');
+                } else if (data.error) {
+                    showStatus(`❌ ${data.error}`, 'error');
+                    clearInterval(checkInterval);
+                    document.getElementById('startBtn').disabled = false;
+                    loadFiles();
+                } else if (data.results.length > 0) {
+                    showStatus(`✓ ${data.progress}`, 'success');
+                    clearInterval(checkInterval);
+                    document.getElementById('startBtn').disabled = false;
+                    loadFiles();
+                }
+            });
+        }
+        function loadFiles() {
+            fetch('/files').then(res => res.json()).then(files => {
+                if (files.length > 0) {
+                    document.getElementById('filesCard').style.display = 'block';
+                    document.getElementById('filesList').innerHTML = files.map(file => `
+                        <div class="result-item">
+                            <div>
+                                <div class="result-name">📄 ${file.name}</div>
+                                <div class="result-meta">Size: ${(file.size / 1024).toFixed(2)} KB | ${file.modified}</div>
+                            </div>
+                            <button class="download-btn" onclick="window.location.href='/download/${file.name}'">⬇️ Download</button>
+                        </div>
+                    `).join('');
+                }
+            });
+        }
+        document.getElementById('scraperForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            document.getElementById('startBtn').disabled = true;
+            showStatus('<div class="spinner"></div> Starting...', 'info');
+            try {
+                const response = await fetch('/scrape', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        query: document.getElementById('query').value,
+                        location: document.getElementById('location').value,
+                        max_results: document.getElementById('maxResults').value,
+                        output_format: document.getElementById('outputFormat').value
+                    })
+                });
+                if (response.ok) {
+                    checkInterval = setInterval(updateStatus, 1000);
+                } else {
+                    showStatus(`❌ Error starting scraper`, 'error');
+                    document.getElementById('startBtn').disabled = false;
+                }
+            } catch (error) {
+                showStatus(`❌ ${error.message}`, 'error');
+                document.getElementById('startBtn').disabled = false;
+            }
+        });
+        loadFiles();
+    </script>
+</body>
+</html>
